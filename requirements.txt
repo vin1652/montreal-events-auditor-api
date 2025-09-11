@@ -1,0 +1,18 @@
+# Core
+langchain>=0.2.14
+langchain-community>=0.2.14
+langchain-groq>=0.1.5
+
+# Pipeline
+requests>=2.32.0
+pandas>=2.2.2
+numpy<2
+python-dateutil>=2.9.0.post0
+jinja2>=3.1.4
+python-dotenv>=1.0.1
+matplotlib>=3.8.4
+
+# Embeddings & Vector DB
+faiss-cpu 
+
+

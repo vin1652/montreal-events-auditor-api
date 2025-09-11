@@ -1,0 +1,131 @@
+name: Weekly Montreal Events
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run every FRIDAY 03:30 UTC == THURSDAY 23:30 in America/Toronto (EDT)
+    - cron: "30 3 * * FRI"
+
+permissions:
+  contents: write
+
+env:
+  BRANCH: "main"                 # <<< change this to the branch you want
+  PYTHON_VERSION: "3.11"
+  OLLAMA_HOST: "http://127.0.0.1:11434"
+  TOP_N: "10"
+  WINDOW_DAYS: "7"
+  MAX_EVENTS_FOR_SUMMARY: "10"
+  EMB_WEIGHT: "0.7"
+  BOROUGH_WEIGHT: "0.3"
+  SHORTLIST_K: "20"
+
+concurrency:
+  group: weekly-montreal-events
+  cancel-in-progress: true
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                # allow rebase
+          ref: ${{ env.BRANCH }}        # checkout target branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-v2-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-v2-
+
+      - name: Cache Ollama models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-${{ runner.os }}-${{ hashFiles('**/preferences.json') }}
+          restore-keys: |
+            ollama-${{ runner.os }}-
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          python -c "import langchain, langchain_community; print('langchain', langchain.__version__); print('langchain-community', langchain_community.__version__)"
+
+      # --- Install & start Ollama on the hosted runner ---
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama (background) and wait until ready)
+        run: |
+          nohup ollama serve >/dev/null 2>&1 &
+          for i in {1..60}; do
+            if curl -sSf $OLLAMA_HOST/api/tags >/dev/null; then
+              echo "Ollama ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: Ensure embedding model is available
+        run: |
+          ollama pull nomic-embed-text
+          # smoke test
+          curl -s -X POST $OLLAMA_HOST/api/embeddings \
+            -H "Content-Type: application/json" \
+            -d '{"model":"nomic-embed-text","prompt":"hello"}' >/dev/null
+
+      # --- Export secrets for summarizer (Groq) ---
+      - name: Export secrets
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "GROQ_API_KEY not set; summarizer will use fallback."
+          fi
+          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> $GITHUB_ENV
+
+      # --- Clean previous report (we keep only the latest) ---
+      - name: Clean old report
+        run: |
+          mkdir -p reports
+          rm -f reports/weekly_tldr.md
+
+      - name: Run weekly pipeline
+        run: |
+          python -m graph.weekly_flow
+
+      # --- Rebase on remote, then add/commit/push latest report ---
+      - name: Commit latest report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # make sure we're on the target branch
+          git checkout $BRANCH
+          # fetch and rebase with autostash to avoid 'unstaged changes' error
+          git fetch origin $BRANCH
+          git pull --rebase --autostash origin $BRANCH
+          # stage only the files we expect
+          git add reports/weekly_tldr.md data/last_run.json || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: weekly report $(date -u +'%Y-%m-%d')"
+            git push origin $BRANCH
+          fi
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report
+          path: reports/weekly_tldr.md

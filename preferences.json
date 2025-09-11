@@ -1,0 +1,43 @@
+{
+  "hard_filters": {
+    "audience_allow": ["Famille", "Adultes", "Pour tous"],
+    "exclude_children": true,
+
+    "emplacement_exclude": ["en ligne"],
+
+    "type_evenement_allow": [
+      "Marché",
+      "Parcours et visite guidée",
+      "Portes ouvertes",
+      "Atelier et cours",
+      "Fête",
+      "Jeux",
+      "Film",
+      "Musique",
+      "Humour",
+      "Cirque",
+      "Exposition permanente",
+      "Littérature",
+      "Club",
+      "Théâtre",
+      "Exposition temporaire"
+    ],
+
+    "arrondissement_allow": [
+      "Ville-Marie",
+      "Outremont",
+      "Le Plateau-Mont-Royal",
+      "Côte-des-Neiges–Notre-Dame-de-Grâce",
+      "Verdun",
+      "Saint-Laurent",
+      "Lachine",
+      "Mercier–Hochelaga-Maisonneuve",
+      "LaSalle"
+    ],
+
+    "max_price": 50,
+    "free_only": false
+  },
+
+  "likes": "Je suis un homme dans la vingtaine et Je préfère les événements en soirée ou en fin de semaine, notamment les festivals de gastronomie, de musique, de cinéma et de films, les expositions et les marchés.je n'adore pas les cours mise en forme"
+}
