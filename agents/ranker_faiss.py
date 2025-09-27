@@ -6,16 +6,19 @@ import pandas as pd
 from typing import List
 
 # Embeddings via local Ollama 
-from langchain_community.embeddings import OllamaEmbeddings
+
 
 from langchain_community.vectorstores import FAISS
 
+from dotenv import load_dotenv
 
-
+load_dotenv()
 PREFS_PATH = "preferences.json"
 EMBED_MODEL = "nomic-embed-text"  
+#OLLAMA_BASE_URL = os.getenv("OLLAMA_HOST") or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
 INDEX_DIR = "data/faiss_index"
 EMB_CACHE = "data/embeddings.npy"
+BACKEND = os.getenv("RANKER_BACKEND", "fastembed").lower()  #fastembed or ollama
 
 
 def _ensure_dirs():
@@ -56,9 +59,16 @@ def _embed_ollama(texts: List[str]) -> np.ndarray:
     Embeds texts using local Ollama (nomic-embed-text by default).
     Requires: ollama serve + ollama pull nomic-embed-text
     """
-    emb = OllamaEmbeddings(model=EMBED_MODEL)
-    vecs = emb.embed_documents(texts)
-    return np.array(vecs, dtype="float32")
+    if BACKEND == "fastembed":
+        from fastembed.text import TextEmbedding
+        model = TextEmbedding(model_name="BAAI/bge-base-en")  # default MiniLM; small & CPU-friendly
+        vecs = [e for e in model.embed(texts)]
+        return np.array(vecs, dtype="float32")
+    else: 
+        #from langchain_community.embeddings import OllamaEmbeddings
+        #emb = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
+        #vecs = emb.embed_documents(texts)
+        return np.array(vecs, dtype="float32")
 
 
 def _rank_faiss(df: pd.DataFrame, texts: List[str], pref_text: str) -> pd.DataFrame:

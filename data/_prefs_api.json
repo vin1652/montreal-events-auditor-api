@@ -1,0 +1,21 @@
+{
+  "hard_filters": {
+    "arrondissement_allow": [
+      "Ville-Marie",
+      "Le Plateau-Mont-Royal"
+    ],
+    "type_evenement_allow": [
+      "Musique",
+      "Marché"
+    ],
+    "emplacement_exclude": [
+      "en ligne"
+    ],
+    "audience_allow": [
+      "Adultes",
+      "Pour tous"
+    ],
+    "max_price": 25
+  },
+  "likes": "evening live music, small markets near downtown; prefer free if possible"
+}

@@ -200,3 +200,47 @@ Stop a running job: Actions → the run → Cancel workflow
 Pause future runs: Actions → the workflow → Disable workflow
 
 Remove entirely: delete .github/workflows/weekly.yml
+
+## Docker 
+docker build -t events-auditor-api .
+docker run -p 8000:8000 --env-file .env events-auditor-api
+
+
+## All Azure commands from the beginning
+``` bash 
+conda activate mea-fastembed
+az login #then press enter
+az group create -n events-auditor-rg -l canadacentral #resource group
+az acr create -n auditoracr123 -g events-auditor-rg --sku Basic # create azure container registry
+az acr login -n auditoracr123 # login to the acr
+docker tag events-auditor-api auditoracr123.azurecr.io/events-auditor-api:latest #tag your image (latest)
+docker push auditoracr123.azurecr.io/events-auditor-api:latest #push it to the container registry
+az provider register -n Microsoft.OperationalInsights --wait #register your subscription for the Microsoft.OperationalInsights resource provider for log analytics
+az containerapp env create -n events-env -g events-auditor-rg -l canadacentral #create a Container Apps environment
+az acr update -n auditoracr123 --admin-enabled true
+# deploy the container app (public ingress on 8000)
+>> az containerapp create `
+>>   -n events-api `
+>>   -g events-auditor-rg `
+>>   --environment events-env `
+>>   --image auditoracr123.azurecr.io/events-auditor-api:latest `
+>>   --ingress external --target-port 8000 `
+>>   --registry-server auditoracr123.azurecr.io `
+>>   --min-replicas 0 --max-replicas 2 `
+>>   --env-vars GROQ_API_KEY=ACTUAL_GROQ_API_KEY GROQ_MODEL=llama-3.1-8b-instant RANKER_BACKEND=fastembed #
+#No credential was provided to access Azure Container Registry. Trying to look up credentials...
+#Adding registry password as a secret with name "auditoracr123azurecrio-auditoracr123"
+#Container app created. Access your app at https://events-api.mangocoast-e3001d94.canadacentral.azurecontainerapps.io/
+az containerapp show -n events-api -g events-auditor-rg --query properties.configuration.ingress.fqdn -o tsv #app link url
+curl https://events-api.mangocoast-e3001d94.canadacentral.azurecontainerapps.io/healthz # run application to check health /doc to post stuff
+#if you have to make changes to the docker image (underlying code) then do the following
+ docker build -t events-auditor-api .
+ docker tag events-auditor-api auditoracr123.azurecr.io/events-auditor-api:latest
+docker push auditoracr123.azurecr.io/events-auditor-api:latest
+az containerapp update `
+>>   -n events-api `
+>>   -g events-auditor-rg `
+>>   --image auditoracr123.azurecr.io/events-auditor-api:latest # assuming You don’t need to change env vars and you already set RANKER_BACKEND=fastembed
+# thats all
+az group delete --name events-auditor-rg
+```

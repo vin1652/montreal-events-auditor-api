@@ -179,16 +179,18 @@ def _default_intro(run_iso: str) -> str:
     return f"# Montréal Events — Week of {date_label}\n\nHere are this week’s highlights. Weather notes are approximate.\n"
 
 
-def summarize_to_markdown(df_selected: pd.DataFrame, run_iso: str) -> str:
+def summarize_to_markdown(df_selected: pd.DataFrame, run_iso: str) -> tuple[str, dict]:
     """
     Produce the final English Markdown TL;DR for the already-selected events in df_selected.
     Lets the LLM decide section membership and counts.
     Falls back to a simple Top Picks list if LLM is unavailable.
     """
+    default_usage: dict = {"prompt_tokens": None, "completion_tokens": None, "usd": None}
     if df_selected is None or df_selected.empty:
-        return _default_intro(run_iso) + "\n_No events matched your filters this week._\n"
+        return _default_intro(run_iso) + "\n_No events matched your filters this week._\n", default_usage
 
     ev_json = _rows_to_min_json(df_selected)
+    
     print("[newsletter] Rows passed to LLM:", len(df_selected))
     llm = _model()
     if llm is None:
@@ -215,15 +217,21 @@ def summarize_to_markdown(df_selected: pd.DataFrame, run_iso: str) -> str:
             bullets.append(bullet)
 
         intro = _default_intro(run_iso)
-        return intro + "\n## Top Picks\n" + "\n".join(bullets[:10]) + "\n"
+        return intro + "\n## Top Picks\n" + "\n".join(bullets[:10]) + "\n", default_usage
 
     try:
         msgs = _compose_newsletter_prompt(ev_json, run_iso)
         resp = llm.invoke(msgs)
         text = resp.content or ""
+    
+        meta = getattr(resp, "response_metadata", {})
+        usage = meta.get("token_usage", None)
+        for k in default_usage.keys():
+            default_usage[k] = usage.get(k, 0) if usage else 0
+        print("[NEWSLETTER] Token usage:", usage)
         if not text.strip():
             raise ValueError("Empty LLM response")
-        return text
+        return text, default_usage
     except Exception as e:
         print("[NEWSLETTER]Summarization failed, using fallback:", repr(e))
         # Minimal fallback
@@ -234,10 +242,7 @@ def summarize_to_markdown(df_selected: pd.DataFrame, run_iso: str) -> str:
             boro = (r.get("arrondissement") or "").strip()
             start = _fmt_date(r.get("start_datetime") )
             bullets.append(f"- **{title}** ({boro}) — {start}\n  {url}")
-        return _default_intro(run_iso) + "\n## Top Picks\n" + "\n".join(bullets[:10]) + "\n"
-
-
-
+        return _default_intro(run_iso) + "\n## Top Picks\n" + "\n".join(bullets[:10]) + "\n", default_usage
 
 
 # ---------- Save report ----------
